@@ -27,11 +27,11 @@ algorand-mern/
 Create a file at `server/.env` based on the example below:
 
 ```env
-PORT=5000
+PORT=3001
 NODE_ENV=development
 CORS_ORIGIN=http://localhost:5173
 
-MONGO_URI=mongodb://127.0.0.1:27017/algomern
+MONGO_URI=mongodb://127.0.0.1:27017/algorand_testnet
 
 ALGOD_SERVER=https://testnet-api.algonode.cloud
 ALGOD_PORT=
@@ -47,24 +47,24 @@ INDEXER_TOKEN=
 ```bash
 cd server
 cp .env.example .env
-npm install
-npm run dev
+pnpm install
+pnpm run dev
 ```
 
-Server runs on **[http://localhost:5000](http://localhost:5000)**
+Server runs on **[http://localhost:3001](http://localhost:3001)**
 
 ### 3️⃣ API Endpoints
 
 | Endpoint                     | Method | Description                    |
 | ---------------------------- | ------ | ------------------------------ |
-| `/api/algorand/send`         | POST   | Send ALGO transaction          |
-| `/api/algorand/status/:txId` | GET    | Check transaction confirmation |
-| `/api/algorand/transactions` | GET    | Fetch all saved transactions   |
+| `/api/v1/algorand/send`         | POST   | Send ALGO transaction          |
+| `/api/v1/algorand/status/:txId` | GET    | Check transaction confirmation |
+| `/api/v1/algorand/transactions` | GET    | Fetch all saved transactions   |
 
 **POST Example:**
 
 ```bash
-curl -X POST http://localhost:5000/api/algorand/send \
+curl -X POST http://localhost:3001/api/v1/algorand/send \
  -H 'Content-Type: application/json' \
  -d '{
    "mnemonic": "<25-word TestNet mnemonic>",
@@ -83,8 +83,7 @@ curl -X POST http://localhost:5000/api/algorand/send \
 Create a file at `client/.env`:
 
 ```env
-VITE_API_URL=http://localhost:5000
-VITE_TEST_RECIPIENT=TW3A3ZK4HPAQ3FGBGGQJW6CA67U65M4TDKH3DH645EYL46P37NA2T6Z2MI
+VITE_API_BASE=http://localhost:3001/api/v1
 ```
 
 ### 2️⃣ Install & Run
@@ -103,7 +102,7 @@ Frontend runs on **[http://localhost:5173](http://localhost:5173)**
 ## 🧩 MongoDB Setup
 
 * Ensure MongoDB is running locally or use a **MongoDB Atlas** connection.
-* Default connection: `mongodb://127.0.0.1:27017/algomern`
+* Default connection: `mongodb://127.0.0.1:27017/algorand_testnet`
 * Schema fields:
 
   * `txId, from, to, amount, status, note, createdAt, confirmedRound`
@@ -138,8 +137,8 @@ Use this as the recipient when testing.
 
 ## ⚙️ API Validation & Error Handling
 
-* **Validation:** via `zod` on both client and server.
-* **Error Handling:** Central Express middleware returns structured `{ error, details }`.
+* **Validation:** via `zod` on server; client does basic checks.
+* **Error Handling:** Central Express middleware returns structured `{ message, stack }`.
 * **UI Feedback:** Inline form errors and live transaction status updates.
 
 ---
