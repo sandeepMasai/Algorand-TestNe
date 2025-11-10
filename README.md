@@ -1,200 +1,219 @@
-# Algorand-TestNe
-# MERN + Algorand Take‑Home Challenge (Submission Guide)
+# Algorand Transaction Manager
 
-## 🧭 Overview
+A full-stack MERN application for sending and monitoring Algorand TestNet transactions with automatic confirmation tracking.
 
-A **MERN stack** application that sends a real **Algorand TestNet** transaction using `algosdk`, records the transaction in **MongoDB**, and displays transaction details and confirmation status in a **React (Vite + TypeScript)** frontend.
+## 🚀 Features
 
-> ⚙️ **Stack:** Express + TypeScript | React + Vite + TypeScript | MongoDB | AlgoNode (TestNet) | shadcn/ui
+- **Send Transactions**: Submit Algorand payments via TestNet with mnemonic or default account
+- **Auto-Confirmation**: Automatically checks and updates transaction status from pending → confirmed
+- **Real-time Updates**: Dashboard refreshes every 8s for pending transactions, 30s for general updates
+- **Transaction History**: View all transactions with timestamps, status, and metadata
+- **Modern UI**: Built with React, TypeScript, shadcn/ui, and Tailwind CSS
+- **Security**: Rate limiting, CORS protection, helmet security headers
+- **Database Persistence**: MongoDB storage for all transaction records
 
----
+## 📋 Prerequisites
 
-## 📁 Project Structure
+- **Node.js** v18+ and npm
+- **MongoDB** (local or cloud instance like MongoDB Atlas)
+- **Algorand TestNet Account** (optional - can use default mnemonic from env)
 
-```
-algorand-mern/
-├─ server/       → Express + TypeScript backend
-├─ client/       → React + Vite + TypeScript frontend
-└─ README.md     → This file
-```
+## 🛠️ Installation
 
----
-
-## 🚀 Backend Setup (Express + TypeScript)
-
-### 1️⃣ Environment Variables
-
-Create a file at `server/.env` based on the example below:
-
-```env
-PORT=3001
-NODE_ENV=development
-CORS_ORIGIN=http://localhost:5173
-
-MONGO_URI=mongodb://127.0.0.1:27017/algorand_testnet
-
-ALGOD_SERVER=https://testnet-api.algonode.cloud
-ALGOD_PORT=
-ALGOD_TOKEN=
-
-INDEXER_SERVER=https://testnet-idx.algonode.cloud
-INDEXER_PORT=
-INDEXER_TOKEN=
-```
-
-### 2️⃣ Install & Run
+### 1. Clone the Repository
 
 ```bash
-cd server
-cp .env.example .env
-pnpm install
-pnpm run dev
+git clone <your-repo-url>
+cd ALOG
 ```
 
-Server runs on **[http://localhost:3001](http://localhost:3001)**
-
-### 3️⃣ API Endpoints
-
-| Endpoint                     | Method | Description                    |
-| ---------------------------- | ------ | ------------------------------ |
-| `/api/v1/algorand/send`         | POST   | Send ALGO transaction          |
-| `/api/v1/algorand/status/:txId` | GET    | Check transaction confirmation |
-| `/api/v1/algorand/transactions` | GET    | Fetch all saved transactions   |
-
-**POST Example:**
+### 2. Backend Setup
 
 ```bash
-curl -X POST http://localhost:3001/api/v1/algorand/send \
- -H 'Content-Type: application/json' \
- -d '{
-   "mnemonic": "<25-word TestNet mnemonic>",
-   "to": "TW3A3ZK4HPAQ3FGBGGQJW6CA67U65M4TDKH3DH645EYL46P37NA2T6Z2MI",
-   "amount": 0.1,
-   "note": "MERN Test"
- }'
-```
-
----
-
-## 💻 Frontend Setup (React + Vite + TypeScript)
-
-### 1️⃣ Environment Variables
-
-Create a file at `client/.env`:
-
-```env
-VITE_API_BASE=http://localhost:3001/api/v1
-```
-
-### 2️⃣ Install & Run
-
-```bash
-cd client
-cp .env.example .env
+cd backend
 npm install
+```
+
+Create a `.env` file in the `backend/` directory:
+
+```bash
+cp .env.example .env
+# Edit .env with your configuration (see .env.md for details)
+```
+
+Required environment variables:
+- `MONGODB_URI` - MongoDB connection string
+- `ALGORAND_MNEMONIC` - 25-word mnemonic phrase (optional if provided in form)
+
+### 3. Frontend Setup
+
+```bash
+cd ../frontend
+npm install
+```
+
+The frontend automatically proxies API requests to `http://localhost:5000` (configured in `vite.config.ts`).
+
+## 🏃 Running the Application
+
+### Development Mode
+
+**Terminal 1 - Backend:**
+```bash
+cd backend
 npm run dev
 ```
 
-Frontend runs on **[http://localhost:5173](http://localhost:5173)**
-
----
-
-## 🧩 MongoDB Setup
-
-* Ensure MongoDB is running locally or use a **MongoDB Atlas** connection.
-* Default connection: `mongodb://127.0.0.1:27017/algorand_testnet`
-* Schema fields:
-
-  * `txId, from, to, amount, status, note, createdAt, confirmedRound`
-
----
-
-## 🪙 Algorand Configuration
-
-* **Network:** TestNet only
-* **Node provider:** [AlgoNode](https://nodely.io/docs/free/start)
-* **TestNet Faucet:** [https://bank.testnet.algorand.network/](https://bank.testnet.algorand.network/)
-
-### Example Test Account
-
-```
-Address: TW3A3ZK4HPAQ3FGBGGQJW6CA67U65M4TDKH3DH645EYL46P37NA2T6Z2MI
+**Terminal 2 - Frontend:**
+```bash
+cd frontend
+npm run dev
 ```
 
-Use this as the recipient when testing.
+- Backend: http://localhost:5000
+- Frontend: http://localhost:5173
+
+### Production Mode
+
+**Build Frontend:**
+```bash
+cd frontend
+npm run build
+```
+
+**Start Backend:**
+```bash
+cd backend
+npm start
+```
+
+## 📡 API Endpoints
+
+### Health Check
+- `GET /api/health` - Server health status
+
+### Transactions
+- `POST /api/algorand/send` - Send a new transaction
+  ```json
+  {
+    "fromMnemonic": "word1 word2 ... word25", // optional
+    "toAddress": "ALGOSDKZXW...",
+    "amount": 0.1,
+    "note": "Optional transaction note"
+  }
+  ```
+
+- `GET /api/algorand/transactions` - Get all transactions
+- `GET /api/algorand/status/:txId` - Check transaction status
+- `POST /api/algorand/confirm/:txId` - Manually confirm a transaction
+
+## 🗄️ Database Schema
+
+### Transaction Model
+```javascript
+{
+  txId: String (unique, required),
+  from: String (required),
+  to: String (required),
+  amount: Number (required),
+  status: 'pending' | 'confirmed' | 'failed',
+  note: String (optional),
+  createdAt: Date,
+  confirmedRound: Number (optional)
+}
+```
+
+## 🔒 Security Features
+
+- **Rate Limiting**: 60 requests per minute per IP (configurable)
+- **Helmet**: Security headers protection
+- **CORS**: Configurable origin whitelist
+- **Input Validation**: Zod schema validation on frontend, service-level validation on backend
+- **Mnemonic Sanitization**: Automatic whitespace normalization
+
+## 🎨 UI Features
+
+- **Dark/Light Mode**: Theme toggle with system preference detection
+- **Responsive Design**: Mobile-friendly layout
+- **Loading States**: Skeleton loaders during data fetch
+- **Toast Notifications**: Success/error feedback
+- **Auto-refresh**: Background polling for pending transactions
+- **Form Reset**: Automatic form clearing after successful submission
+
+## 📝 Usage Examples
+
+### Send a Transaction
+
+1. Open the frontend at http://localhost:5173
+2. Fill in the form:
+   - **Mnemonic** (optional): Leave empty to use backend default, or provide 25-word phrase
+   - **Recipient Address**: Valid Algorand address
+   - **Amount**: ALGO amount (e.g., 0.1)
+   - **Note** (optional): Transaction memo
+3. Click "Send Transaction"
+4. Form resets automatically and transaction appears in the list
+
+### Monitor Transactions
+
+- Transactions appear in the "Recent Transactions" panel
+- Pending transactions show a badge with count in the header
+- Status updates automatically every 8 seconds for pending items
+- Click "Refresh" to manually reload the list
+
+## 🐛 Troubleshooting
+
+### Backend won't start
+- Check MongoDB is running and `MONGODB_URI` is correct
+- Verify all required environment variables are set
+- Check port 5000 is not in use
+
+### Transactions fail to send
+- Ensure mnemonic is valid (25 words, all in Algorand wordlist)
+- Verify recipient address is a valid Algorand address
+- Check Algorand TestNet node is accessible (default: testnet-api.algonode.cloud)
+
+### Frontend can't connect to backend
+- Ensure backend is running on port 5000
+- Check CORS settings in backend `.env` if accessing from different origin
+- Verify Vite proxy configuration in `vite.config.ts`
+
+### Transactions stuck in "pending"
+- Network may be slow - auto-refresh will update when confirmed
+- Use `POST /api/algorand/confirm/:txId` to manually trigger confirmation check
+- Verify Algorand TestNet node connectivity
+
+## 📚 Tech Stack
+
+### Backend
+- Node.js + Express
+- MongoDB + Mongoose
+- Algorand SDK (algosdk)
+- dotenv, helmet, cors, morgan, express-rate-limit
+
+### Frontend
+- React 18 + TypeScript
+- Vite
+- Tailwind CSS + shadcn/ui components
+- React Hook Form + Zod validation
+- date-fns for date formatting
+- Sonner for toast notifications
+
+## 📄 License
+
+ISC
+
+## 🤝 Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Submit a pull request
+
+## 📞 Support
+
+For issues or questions, please open an issue on GitHub.
 
 ---
 
-## 🧠 Security Awareness
+**Note**: This application is configured for Algorand TestNet. Never use mainnet credentials or real funds in development.
 
-✅ Mnemonics are never stored in DB or logs. Used only in memory for signing.
-✅ Server validates address & amount.
-✅ Helmet & CORS configured.
-✅ `.env.example` provided (do not commit real keys).
-✅ Uses **TestNet** only (never MainNet).
-
----
-
-## ⚙️ API Validation & Error Handling
-
-* **Validation:** via `zod` on server; client does basic checks.
-* **Error Handling:** Central Express middleware returns structured `{ message, stack }`.
-* **UI Feedback:** Inline form errors and live transaction status updates.
-
----
-
-## 🎨 UI / UX
-
-* Minimal, clean interface using Tailwind + shadcn/ui.
-* Features:
-
-  * Form for mnemonic, recipient, amount, note.
-  * Displays `txId`, `status`, and `confirmedRound`.
-  * Auto-refresh transaction list every 10s.
-  * Polls transaction status every 5s until confirmation.
-
----
-
-## 🧾 Bonus Features
-
-* **Indexer API** integration for advanced transaction info.
-* Optional **WalletConnect / Pera Wallet** client-side signing.
-* Ready for deployment to Render / Vercel.
-
----
-
-## ✅ Evaluation Checklist
-
-| Criteria           | Description                       | Points |
-| ------------------ | --------------------------------- | ------ |
-| Correctness        | Sends real TestNet transaction    | 3      |
-| Error Handling     | Validation & safe error responses | 4      |
-| Security Awareness | No mnemonic storage, proper docs  | 4      |
-| UI / UX Flow       | Clean React form + feedback       | 3      |
-| Database           | Transaction record keeping        | 3      |
-
----
-
-## 📦 Submission
-
-1. Push the project to **GitHub**.
-2. Include:
-
-   * `server/` & `client/` directories
-   * `.env.example` files
-   * This `README.md`
-3. Submit GitHub link before **3:00 PM, 11 Nov 2025**.
-
----
-
-## 📚 References
-
-* Algorand SDK Docs: [https://developer.algorand.org/docs/sdks/javascript/](https://developer.algorand.org/docs/sdks/javascript/)
-* AlgoNode Public Endpoints: [https://nodely.io/docs/free/start](https://nodely.io/docs/free/start)
-* shadcn/ui Components: [https://ui.shadcn.com/](https://ui.shadcn.com/)
-
----
-
-**Developed by:** Sandeep Kumar 🧑‍💻
-**Stack:** MERN + Algorand TestNet
-**Deadline:** ⏰ 3 PM, 11 Nov 2025
