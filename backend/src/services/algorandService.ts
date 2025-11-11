@@ -57,14 +57,14 @@ export class AlgorandService {
       const senderAccount = algosdk.mnemonicToSecretKey(mnemonicInput);
       const suggestedParams = await this.algodClient.getTransactionParams().do();
 
-      //  Updated field names for Algorand SDK v3.5.2
       const txn = algosdk.makePaymentTxnWithSuggestedParamsFromObject({
-        sender: senderAccount.addr,
-        receiver: toAddress,
-        amount: Math.round(numericAmount * 1_000_000), // ALGO → microAlgos
-        note: note ? new TextEncoder().encode(note) : undefined,
-        suggestedParams,
-      });
+  from: senderAddress, // ✅ correct
+  to: receiverAddress,
+  amount: amount,
+  note: note ? new Uint8Array(Buffer.from(note)) : undefined,
+  suggestedParams: params,
+});
+
 
       const signedTxn = txn.signTxn(senderAccount.sk);
       const txResult = await this.algodClient.sendRawTransaction(signedTxn).do();
