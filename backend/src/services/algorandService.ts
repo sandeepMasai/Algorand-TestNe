@@ -142,7 +142,7 @@ export class AlgorandService {
     try {
       return await Transaction.find().sort({ createdAt: -1 });
     } catch (error: any) {
-      console.error(" Error fetching transactions:", error.message);
+      console.error("Error fetching transactions:", error.message);
       throw new Error(error.message || "Failed to fetch transactions");
     }
   }
