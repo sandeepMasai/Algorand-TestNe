@@ -1,15 +1,13 @@
-import { useState } from "react";
 import { useAccountInfo } from "@/hooks/useAccountInfo";
 import { useWallet } from "@/contexts/WalletContext";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Coins, RefreshCw, Pause, Play } from "lucide-react";
+import { Coins, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 export default function AccountInfo() {
   const { address } = useWallet();
-  const [autoRefresh, setAutoRefresh] = useState(true);
-  const { accountInfo, loading, error, refetch } = useAccountInfo(address, autoRefresh);
+  const { accountInfo, loading, error, refetch } = useAccountInfo(address);
 
   if (!address) {
     return null;
@@ -31,18 +29,6 @@ export default function AccountInfo() {
             <CardDescription>Your account information</CardDescription>
           </div>
           <div className="flex items-center gap-2">
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => setAutoRefresh(!autoRefresh)}
-              title={autoRefresh ? "Pause auto-refresh" : "Enable auto-refresh"}
-            >
-              {autoRefresh ? (
-                <Pause className="h-4 w-4" />
-              ) : (
-                <Play className="h-4 w-4" />
-              )}
-            </Button>
             <Button
               variant="ghost"
               size="icon"

@@ -19,21 +19,45 @@ const app = express();
 // ----------------------
 // Security & JSON Parsing
 // ----------------------
-app.use(helmet());
+// Configure helmet to allow CORS
+app.use(
+  helmet({
+    crossOriginResourcePolicy: { policy: "cross-origin" },
+  })
+);
 app.use(express.json({ limit: "1mb" }));
 
 // ----------------------
-// CORS
+// CORS Configuration
 // ----------------------
-const allowedOrigins = (process.env.CORS_ORIGINS || "")
+const corsOriginsEnv = process.env.CORS_ORIGINS || process.env.CORS_ORIGIN || "";
+const allowedOrigins = corsOriginsEnv
   .split(",")
   .map((s) => s.trim())
   .filter(Boolean);
 
+// CORS configuration
 app.use(
   cors({
-    origin: allowedOrigins.length ? allowedOrigins : "*",
+    origin: function (origin, callback) {
+      // Allow requests with no origin (like mobile apps or curl requests)
+      if (!origin) return callback(null, true);
+
+      // If CORS_ORIGINS is set to "*" or empty, allow all origins
+      if (corsOriginsEnv === "*" || allowedOrigins.length === 0) {
+        return callback(null, true);
+      }
+
+      // Check if origin is in allowed list
+      if (allowedOrigins.indexOf(origin) !== -1) {
+        callback(null, true);
+      } else {
+        callback(new Error("Not allowed by CORS"));
+      }
+    },
     credentials: false,
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
   })
 );
 

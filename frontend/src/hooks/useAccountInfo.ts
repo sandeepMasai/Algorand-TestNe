@@ -17,7 +17,7 @@ interface AccountInfo {
   }>;
 }
 
-export function useAccountInfo(address: string | null, autoRefresh: boolean = true) {
+export function useAccountInfo(address: string | null) {
   const [accountInfo, setAccountInfo] = useState<AccountInfo | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -48,13 +48,7 @@ export function useAccountInfo(address: string | null, autoRefresh: boolean = tr
     };
 
     fetchAccountInfo();
-    
-    if (!autoRefresh) return;
-    
-    // Refresh every 10 seconds
-    const interval = setInterval(fetchAccountInfo, 10000);
-    return () => clearInterval(interval);
-  }, [address, autoRefresh]);
+  }, [address]);
 
   return { accountInfo, loading, error, refetch: async () => {
     if (address) {

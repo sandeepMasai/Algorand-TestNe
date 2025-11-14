@@ -12,13 +12,12 @@ import {
     TableHeader,
     TableRow,
 } from "@/components/ui/table";
-import { RefreshCw, Pause, Play } from "lucide-react";
+import { RefreshCw } from "lucide-react";
 
 export default function TransactionList() {
     const [transactions, setTransactions] = useState<Transaction[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
-    const [autoRefresh, setAutoRefresh] = useState(true);
 
     const fetchTransactions = async () => {
         try {
@@ -39,13 +38,7 @@ export default function TransactionList() {
 
     useEffect(() => {
         fetchTransactions();
-
-        if (!autoRefresh) return;
-
-        // Refresh every 5 seconds
-        const interval = setInterval(fetchTransactions, 5000);
-        return () => clearInterval(interval);
-    }, [autoRefresh]);
+    }, []);
 
     const formatDate = (dateString: string) => {
         return new Date(dateString).toLocaleString();
@@ -73,18 +66,6 @@ export default function TransactionList() {
                         </CardDescription>
                     </div>
                     <div className="flex items-center gap-2">
-                        <Button
-                            onClick={() => setAutoRefresh(!autoRefresh)}
-                            variant="outline"
-                            size="icon"
-                            title={autoRefresh ? "Pause auto-refresh" : "Enable auto-refresh"}
-                        >
-                            {autoRefresh ? (
-                                <Pause className="h-4 w-4" />
-                            ) : (
-                                <Play className="h-4 w-4" />
-                            )}
-                        </Button>
                         <Button
                             onClick={fetchTransactions}
                             variant="outline"
