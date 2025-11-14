@@ -1,193 +1,208 @@
-import algosdk, { SuggestedParams } from "algosdk";
-import Transaction from "../models/Transaction";
-import { TransactionResult, TransactionStatus } from "../types/algorand.types";
+import { Request, Response } from "express";
+import { AlgorandService } from "../services/algorandService";
+import { TransactionRequest } from "../types/algorand.types";
+import { serializeBigInt } from "../utils/serializeBigInt";
 
-const ALGOD_SERVER = process.env.ALGOD_SERVER || "https://testnet-api.algonode.cloud";
-const ALGOD_PORT = process.env.ALGOD_PORT || "";
-const ALGOD_TOKEN = process.env.ALGOD_TOKEN || "";
-const DEFAULT_MNEMONIC = process.env.ALGORAND_MNEMONIC || "";
+const algorandService = new AlgorandService();
 
 /**
- * Sanitize mnemonic input (remove extra spaces)
+ * Send ALGO transaction
  */
-const sanitizeMnemonic = (mnemonic?: string): string => {
-  if (!mnemonic) return "";
-  return mnemonic.trim().split(/\s+/).join(" ");
-};
+export async function sendTransaction(req: Request, res: Response) {
+  try {
+    const { fromMnemonic, senderMnemonic, toAddress, to, amount, note }: TransactionRequest = req.body;
 
-/**
- * Create a formatted Bad Request error
- */
-const badRequest = (message: string, code: string): Error & { statusCode: number; code: string } => {
-  const err = new Error(message) as Error & { statusCode: number; code: string };
-  err.statusCode = 400;
-  err.code = code;
-  return err;
-};
+    const mnemonic = fromMnemonic || senderMnemonic;
+    const recipient = toAddress || to;
 
-/**
- * Wait for a transaction confirmation
- */
-async function waitForConfirmation(
-  algodClient: algosdk.Algodv2,
-  txId: string,
-  timeout = 10
-): Promise<algosdk.modelsv2.PendingTransactionResponse> {
-  console.log(`⏳ Waiting for confirmation: ${txId}`);
-
-  const startRound = (await algodClient.status().do())["last-round"] + 1;
-  let currentRound = startRound;
-
-  while (currentRound < startRound + timeout) {
-    const pendingInfo = await algodClient.pendingTransactionInformation(txId).do();
-
-    if (pendingInfo["confirmed-round"] && pendingInfo["confirmed-round"] > 0) {
-      console.log(`✅ Transaction confirmed in round ${pendingInfo["confirmed-round"]}`);
-      return pendingInfo;
-    } else if (pendingInfo["pool-error"]) {
-      throw new Error(`Transaction Pool Error: ${pendingInfo["pool-error"]}`);
+    if (!mnemonic) {
+      return res.status(400).json({
+        error: "Mnemonic is required. Provide fromMnemonic or senderMnemonic in the request body.",
+        code: "MISSING_MNEMONIC",
+      });
     }
 
-    await algodClient.statusAfterBlock(currentRound).do();
-    currentRound++;
-  }
+    if (!recipient) {
+      return res.status(400).json({
+        error: "Recipient address is required. Provide toAddress or to in the request body.",
+        code: "MISSING_RECIPIENT",
+      });
+    }
 
-  throw new Error(`Transaction not confirmed after ${timeout} rounds`);
+    if (!amount) {
+      return res.status(400).json({
+        error: "Amount is required.",
+        code: "MISSING_AMOUNT",
+      });
+    }
+
+    const result = await algorandService.sendTransaction(mnemonic, recipient, amount, note);
+    res.status(200).json(result);
+  } catch (error: any) {
+    console.error("❌ Error in sendTransaction controller:", error.message);
+    const statusCode = error.statusCode || 500;
+    res.status(statusCode).json({
+      error: error.message || "Failed to send transaction",
+      code: error.code || "INTERNAL_ERROR",
+    });
+  }
 }
 
 /**
- * Algorand Service Class
+ * Get transaction status by txId
  */
-export class AlgorandService {
-  private algodClient: algosdk.Algodv2;
+export async function getTransactionStatus(req: Request, res: Response) {
+  try {
+    const { txId } = req.params;
+    if (!txId) {
+      return res.status(400).json({ error: "Transaction ID is required", code: "MISSING_TX_ID" });
+    }
 
-  constructor() {
-    this.algodClient = new algosdk.Algodv2(ALGOD_TOKEN, ALGOD_SERVER, ALGOD_PORT);
+    const status = await algorandService.checkTransactionStatus(txId);
+    res.status(200).json(serializeBigInt(status));
+  } catch (error: any) {
+    console.error("⚠️ Error in getTransactionStatus controller:", error.message);
+    res.status(500).json({
+      error: error.message || "Failed to get transaction status",
+      code: "INTERNAL_ERROR",
+    });
+  }
+}
+
+/**
+ * Confirm transaction status and update DB
+ */
+export async function confirmTransaction(req: Request, res: Response) {
+  try {
+    const { txId } = req.params;
+    if (!txId) {
+      return res.status(400).json({ error: "Transaction ID is required", code: "MISSING_TX_ID" });
+    }
+
+    const status = await algorandService.checkTransactionStatus(txId);
+    res.status(200).json(serializeBigInt(status));
+  } catch (error: any) {
+    console.error("⚠️ Error in confirmTransaction controller:", error.message);
+    res.status(500).json({
+      error: error.message || "Failed to confirm transaction",
+      code: "INTERNAL_ERROR",
+    });
+    }
   }
 
   /**
-   * Send ALGO transaction
-   */
-  async sendTransaction(
-    fromMnemonic: string,
-    toAddress: string,
-    amount: number,
-    note?: string
-  ): Promise<TransactionResult> {
+ * Get all transactions (with auto-check of pending transactions)
+ */
+export async function getTransactions(req: Request, res: Response) {
+  try {
+    // Auto-check pending transactions before returning
     try {
-      const mnemonicInput = sanitizeMnemonic(fromMnemonic || DEFAULT_MNEMONIC);
+      await algorandService.checkPendingTransactions();
+    } catch (checkError: any) {
+      console.warn("⚠️ Error auto-checking pending transactions:", checkError.message);
+      // Continue even if auto-check fails
+    }
 
-      if (!mnemonicInput) {
-        throw badRequest(
-          "Mnemonic is required. Provide fromMnemonic in the request body or set ALGORAND_MNEMONIC.",
-          "MISSING_MNEMONIC"
-        );
-      }
+    const transactions = await algorandService.getTransactions();
+    res.status(200).json(transactions);
+    } catch (error: any) {
+    console.error("⚠️ Error in getTransactions controller:", error.message);
+    res.status(500).json({
+      error: error.message || "Failed to fetch transactions",
+      code: "INTERNAL_ERROR",
+    });
+    }
+  }
 
-      if (!algosdk.isValidAddress(toAddress)) {
-        throw badRequest("Invalid recipient address", "INVALID_RECIPIENT");
-      }
+  /**
+ * Check and update all pending transactions
+ */
+export async function checkPendingTransactions(req: Request, res: Response) {
+  try {
+    const result = await algorandService.checkPendingTransactions();
+    res.status(200).json({
+      message: "Pending transactions checked",
+      ...result,
+    });
+    } catch (error: any) {
+    console.error("⚠️ Error in checkPendingTransactions controller:", error.message);
+    res.status(500).json({
+      error: error.message || "Failed to check pending transactions",
+      code: "INTERNAL_ERROR",
+    });
+    }
+  }
 
-      const numericAmount = Number(amount);
-      if (!Number.isFinite(numericAmount) || numericAmount <= 0) {
-        throw badRequest("Amount must be a positive number", "INVALID_AMOUNT");
-      }
+  /**
+ * Get account information
+ */
+export async function getAccountInfo(req: Request, res: Response) {
+  try {
+    const { address } = req.params;
+    if (!address) {
+      return res.status(400).json({ error: "Address is required", code: "MISSING_ADDRESS" });
+    }
 
-      // 🔹 Recover sender account
-      const senderAccount = algosdk.mnemonicToSecretKey(mnemonicInput);
-      const suggestedParams: SuggestedParams = await this.algodClient.getTransactionParams().do();
+    const accountInfo = await algorandService.getAccountInfo(address);
+    res.status(200).json(serializeBigInt(accountInfo));
+  } catch (error: any) {
+    console.error("⚠️ Error in getAccountInfo controller:", error.message);
+    res.status(500).json({
+      error: error.message || "Failed to get account info",
+      code: "INTERNAL_ERROR",
+    });
+  }
+}
 
-      // ✅ Correct field names for Algorand SDK v3.5.2
-      const txn = algosdk.makePaymentTxnWithSuggestedParamsFromObject({
-        from: senderAccount.addr,
-        to: toAddress,
-        amount: Math.round(numericAmount * 1_000_000), // ALGO → microAlgos
-        note: note ? new TextEncoder().encode(note) : undefined,
-        suggestedParams,
+/**
+ * Send signed transaction (signed by wallet)
+ */
+export async function sendSignedTransaction(req: Request, res: Response) {
+  try {
+    const { signedTxn, fromAddress, toAddress, amount, note } = req.body;
+
+    if (!signedTxn) {
+      return res.status(400).json({
+        error: "Signed transaction is required",
+        code: "MISSING_SIGNED_TXN",
       });
+    }
 
-      // 🔹 Sign and send transaction
-      const signedTxn = txn.signTxn(senderAccount.sk);
-      const { txId } = await this.algodClient.sendRawTransaction(signedTxn).do();
-
-      console.log(`🚀 Transaction sent: ${txId}`);
-
-      // 🔹 Wait for confirmation
-      const confirmedTxn = await waitForConfirmation(this.algodClient, txId, 10);
-
-      // 🔹 Save transaction record to MongoDB
-      const dbTransaction = new Transaction({
-        txId,
-        from: senderAccount.addr,
-        to: toAddress,
-        amount: numericAmount,
-        status: "confirmed",
-        note,
-        confirmedRound: confirmedTxn["confirmed-round"],
-        createdAt: new Date(),
+    if (!fromAddress) {
+      return res.status(400).json({
+        error: "Sender address is required",
+        code: "MISSING_SENDER",
       });
-
-      await dbTransaction.save();
-
-      return { txId, transaction: dbTransaction };
-    } catch (error: any) {
-      console.error("❌ Error sending transaction:", error.message);
-      if (!error.statusCode) error.statusCode = 500;
-      throw error;
     }
-  }
 
-  /**
-   * Check transaction confirmation status
-   */
-  async checkTransactionStatus(txId: string): Promise<TransactionStatus> {
-    try {
-      if (!txId) throw new Error("Transaction ID is required");
-
-      const pendingInfo: any = await this.algodClient.pendingTransactionInformation(txId).do();
-
-      if (pendingInfo.confirmedRound) {
-        const confirmedRound = pendingInfo.confirmedRound;
-        await Transaction.findOneAndUpdate({ txId }, { status: "confirmed", confirmedRound });
-        return { status: "confirmed", confirmedRound, transaction: pendingInfo };
-      }
-
-      if (pendingInfo.poolError) {
-        await Transaction.findOneAndUpdate({ txId }, { status: "failed" });
-        return { status: "failed", transaction: pendingInfo };
-      }
-
-      return { status: "pending", transaction: pendingInfo };
-    } catch (error: any) {
-      console.error("⚠️ Error checking transaction status:", error.message);
-      await Transaction.findOneAndUpdate({ txId }, { status: "failed" });
-      throw new Error(error.message || "Failed to check transaction status");
+    if (!toAddress) {
+      return res.status(400).json({
+        error: "Recipient address is required",
+        code: "MISSING_RECIPIENT",
+      });
     }
-  }
 
-  /**
-   * Fetch account info from Algorand network
-   */
-  async getAccountInfo(address: string) {
-    try {
-      if (!algosdk.isValidAddress(address)) throw new Error("Invalid address");
-      const info = await this.algodClient.accountInformation(address).do();
-      return info;
-    } catch (error: any) {
-      console.error("⚠️ Error getting account info:", error.message);
-      throw new Error(error.message || "Failed to fetch account info");
+    if (!amount) {
+      return res.status(400).json({
+        error: "Amount is required",
+        code: "MISSING_AMOUNT",
+      });
     }
-  }
 
-  /**
-   * Fetch all transactions from MongoDB
-   */
-  async getTransactions() {
-    try {
-      return await Transaction.find().sort({ createdAt: -1 });
-    } catch (error: any) {
-      console.error("⚠️ Error fetching transactions:", error.message);
-      throw new Error(error.message || "Failed to fetch transactions");
-    }
+    const result = await algorandService.sendSignedTransaction(
+      signedTxn,
+      fromAddress,
+      toAddress,
+      amount,
+      note
+    );
+    res.status(200).json(result);
+  } catch (error: any) {
+    console.error("❌ Error in sendSignedTransaction controller:", error.message);
+    const statusCode = error.statusCode || 500;
+    res.status(statusCode).json({
+      error: error.message || "Failed to send signed transaction",
+      code: error.code || "INTERNAL_ERROR",
+    });
   }
 }

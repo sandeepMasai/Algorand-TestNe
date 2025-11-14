@@ -4,11 +4,25 @@ import helmet from "helmet";
 import morgan from "morgan";
 import rateLimit from "express-rate-limit";
 import dotenv from "dotenv";
+import path from "path";
 import { connectDB } from "../src/config/db";
 import algorandRouter from "../src/routes/algorand";
 
-// Load environment variables
-dotenv.config();
+// Load environment variables from backend/.env
+// Try multiple paths to find .env file (works when running from different directories)
+const envPaths = [
+  path.resolve(process.cwd(), ".env"), // When running from backend/
+  path.resolve(__dirname, "../../.env"), // When running from backend/src/ (compiled)
+  path.resolve(process.cwd(), "../.env"), // When running from backend/src/
+];
+
+for (const envPath of envPaths) {
+  const result = dotenv.config({ path: envPath });
+  if (!result.error) {
+    console.log(`✓ Loaded .env from: ${envPath}`);
+    break;
+  }
+}
 
 const app = express();
 

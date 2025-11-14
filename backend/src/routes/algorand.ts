@@ -3,7 +3,10 @@ import {
   sendTransaction,
   getTransactionStatus,
   confirmTransaction,
-  getTransactions
+  getTransactions,
+  checkPendingTransactions,
+  getAccountInfo,
+  sendSignedTransaction
 } from "../controllers/algorandController";
 
 const router: Router = Router();
@@ -31,5 +34,20 @@ router.post("/confirm/:txId", confirmTransaction);
    // Get all transactions
  
 router.get("/transactions", getTransactions);
+
+   // POST /api/algorand/check-pending
+   // Check and update all pending transactions
+ 
+router.post("/check-pending", checkPendingTransactions);
+
+   // GET /api/algorand/account/:address
+   // Get account information
+ 
+router.get("/account/:address", getAccountInfo);
+
+   // POST /api/algorand/send-signed
+   // Send signed transaction (signed by wallet)
+ 
+router.post("/send-signed", sendSignedTransaction);
 
 export default router;

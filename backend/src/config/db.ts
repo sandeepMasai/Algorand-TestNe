@@ -2,7 +2,7 @@ import mongoose, { Connection } from "mongoose";
 
 
 export const connectDB = async (uri: string = process.env.MONGODB_URI as string): Promise<Connection> => {
- 
+
   try {
     const conn = await mongoose.connect(uri);
     console.log(` MongoDB connected: ${conn.connection.host}`);
