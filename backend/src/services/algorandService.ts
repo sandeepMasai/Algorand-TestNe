@@ -30,7 +30,115 @@ export class AlgorandService {
   private algodClient: algosdk.Algodv2;
 
   constructor() {
-    this.algodClient = new algosdk.Algodv2(ALGOD_TOKEN, ALGOD_SERVER, ALGOD_PORT);
+    // algosdk.Algodv2 expects: (token, server, port)
+    // Based on algosdk source, it constructs URLs internally and needs protocol
+    // So we should pass the full URL with protocol, or just hostname with proper format
+    let server = ALGOD_SERVER.trim();
+    let port: string | number | undefined;
+    
+    // Log original value for debugging
+    console.log(`[DEBUG] Original ALGOD_SERVER: "${server}"`);
+    
+    // Check if server already has protocol
+    const hasProtocol = /^https?:\/\//i.test(server);
+    
+    // Extract hostname and determine protocol
+    let hostname = server;
+    let protocol = "https";
+    
+    if (hasProtocol) {
+      // Extract protocol
+      if (server.toLowerCase().startsWith("https://")) {
+        protocol = "https";
+        hostname = server.replace(/^https:\/\//i, "");
+      } else {
+        protocol = "http";
+        hostname = server.replace(/^http:\/\//i, "");
+      }
+    }
+    
+    // Remove any path after hostname (everything after first /)
+    const pathIndex = hostname.indexOf("/");
+    if (pathIndex !== -1) {
+      hostname = hostname.substring(0, pathIndex);
+    }
+    
+    // Extract port from hostname if present (e.g., hostname:443)
+    const urlPortMatch = hostname.match(/:(\d+)$/);
+    if (urlPortMatch) {
+      port = parseInt(urlPortMatch[1], 10);
+      hostname = hostname.replace(/:\d+$/, "");
+    } else if (ALGOD_PORT && ALGOD_PORT.trim() !== "") {
+      // Use explicit port from env
+      port = parseInt(ALGOD_PORT, 10) || ALGOD_PORT;
+    } else {
+      // Default port based on protocol
+      if (protocol === "https") {
+        port = 443;
+      } else {
+        port = 80;
+      }
+    }
+    
+    // Final cleanup: trim hostname
+    hostname = hostname.trim().replace(/[/\\]+$/, "").replace(/^[/\\]+/, "");
+    
+    // Validate hostname is not empty
+    if (!hostname || hostname.length === 0) {
+      throw new Error(`Invalid ALGOD_SERVER configuration: "${ALGOD_SERVER}"`);
+    }
+    
+    // Log cleaned values for debugging
+    console.log(`[DEBUG] Using hostname: "${hostname}", port: ${port}, protocol: ${protocol}`);
+    
+    // algosdk internally constructs URLs and needs protocol
+    // Try passing the full URL as server parameter (some versions support this)
+    // If that doesn't work, we'll pass hostname and port separately
+    try {
+      // First try: pass full URL as server (some algosdk versions support this)
+      const fullUrl = `${protocol}://${hostname}:${port}`;
+      console.log(`[DEBUG] Attempting with full URL: "${fullUrl}"`);
+      this.algodClient = new algosdk.Algodv2(ALGOD_TOKEN || "", fullUrl);
+      console.log(`✓ Algorand client initialized with full URL: ${fullUrl}`);
+    } catch (error: any) {
+      // Fallback: pass hostname and port separately
+      console.log(`[DEBUG] Full URL failed, trying hostname + port separately`);
+      // Ensure hostname is absolutely clean (no slashes, no special chars)
+      const cleanHostname = hostname.replace(/[\/\\]/g, "").trim();
+      this.algodClient = new algosdk.Algodv2(ALGOD_TOKEN || "", cleanHostname, port);
+      console.log(`✓ Algorand client initialized: ${cleanHostname}:${port} (${protocol})`);
+    }
+  }
+
+  /**
+   * Test connection to Algorand network
+   */
+  private async testConnection(): Promise<void> {
+    try {
+      const status = await this.algodClient.status().do();
+      console.log(`✓ Algorand network connection successful. Last round: ${status.lastRound}`);
+    } catch (error: any) {
+      const errorMessage = error.message || "Unknown error";
+      const errorStack = error.stack || "";
+      console.error(`✗ Algorand network connection failed:`);
+      console.error(`  Error: ${errorMessage}`);
+      console.error(`  Server: ${ALGOD_SERVER}`);
+      console.error(`  Stack: ${errorStack}`);
+      
+      // Provide more specific error messages
+      if (errorMessage.includes("fetch failed") || errorMessage.includes("ECONNREFUSED")) {
+        throw new Error(
+          `Network connection failed. Cannot reach Algorand node at ${ALGOD_SERVER}. ` +
+          `This could be due to: network connectivity issues, firewall restrictions, or incorrect server configuration. ` +
+          `Please verify ALGOD_SERVER is correct and accessible.`
+        );
+      }
+      
+      throw new Error(
+        `Cannot connect to Algorand network (${ALGOD_SERVER}). ` +
+        `Error: ${errorMessage}`
+      );
+    }
   }
 
   /**
@@ -78,7 +186,8 @@ export class AlgorandService {
         );
       }
 
-      // --- Get network parameters ---
+      // --- Test connection and get network parameters ---
+      await this.testConnection();
       const suggestedParams: SuggestedParams = await this.algodClient.getTransactionParams().do();
 
       // --- Build transaction ---
@@ -131,9 +240,23 @@ export class AlgorandService {
 
       return { txId, transaction: dbTransaction as Document<ITransaction> };
     } catch (error: any) {
-      console.error(" Error sending transaction:", error.message);
+      const errorMessage = error.message || "Unknown error";
+      console.error("❌ Error sending transaction:", errorMessage);
+      
+      // Provide more helpful error messages
+      if (errorMessage.includes("fetch failed") || errorMessage.includes("ECONNREFUSED") || errorMessage.includes("ENOTFOUND")) {
+        const networkError = new Error(
+          `Network connection failed. Cannot reach Algorand node at ${ALGOD_SERVER}. ` +
+          `Please check your internet connection and ALGOD_SERVER configuration.`
+        ) as ServiceError;
+        networkError.statusCode = 503;
+        networkError.code = "NETWORK_ERROR";
+        throw networkError;
+      }
+      
       const err: ServiceError = error;
       if (!err.statusCode) err.statusCode = 500;
+      if (!err.code) err.code = "TRANSACTION_ERROR";
       throw err;
     }
   }
