@@ -17,49 +17,36 @@ dotenv.config({ path: path.resolve(process.cwd(), ".env") });
 const app = express();
 
 // ----------------------
+// CORS Configuration (MUST be before other middleware)
+// ----------------------
+const corsOriginsEnv = process.env.CORS_ORIGINS || process.env.CORS_ORIGIN || "*";
+const allowedOrigins = corsOriginsEnv === "*"
+  ? "*"
+  : corsOriginsEnv.split(",").map((s) => s.trim()).filter(Boolean);
+
+app.use(
+  cors({
+    origin: allowedOrigins === "*" ? true : allowedOrigins,
+    credentials: false,
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
+    allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"],
+    exposedHeaders: ["Content-Length", "Content-Type"],
+    optionsSuccessStatus: 200, // Some legacy browsers (IE11, various SmartTVs) choke on 204
+  })
+);
+
+// ----------------------
 // Security & JSON Parsing
 // ----------------------
 // Configure helmet to allow CORS
 app.use(
   helmet({
     crossOriginResourcePolicy: { policy: "cross-origin" },
+    crossOriginEmbedderPolicy: false,
   })
 );
 app.use(express.json({ limit: "1mb" }));
-
-// ----------------------
-// CORS Configuration
-// ----------------------
-const corsOriginsEnv = process.env.CORS_ORIGINS || process.env.CORS_ORIGIN || "";
-const allowedOrigins = corsOriginsEnv
-  .split(",")
-  .map((s) => s.trim())
-  .filter(Boolean);
-
-// CORS configuration
-app.use(
-  cors({
-    origin: function (origin, callback) {
-      // Allow requests with no origin (like mobile apps or curl requests)
-      if (!origin) return callback(null, true);
-
-      // If CORS_ORIGINS is set to "*" or empty, allow all origins
-      if (corsOriginsEnv === "*" || allowedOrigins.length === 0) {
-        return callback(null, true);
-      }
-
-      // Check if origin is in allowed list
-      if (allowedOrigins.indexOf(origin) !== -1) {
-        callback(null, true);
-      } else {
-        callback(new Error("Not allowed by CORS"));
-      }
-    },
-    credentials: false,
-    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization"],
-  })
-);
+app.use(express.urlencoded({ extended: true }));
 
 // ----------------------
 // Logging
@@ -102,9 +89,36 @@ app.get("/api/health", (_req: Request, res: Response) => {
 });
 
 // ----------------------
+// Error Handling Middleware
+// ----------------------
+app.use((err: any, _req: Request, res: Response, _next: any) => {
+  console.error("Error:", err);
+  res.status(err.status || 500).json({
+    error: err.message || "Internal server error",
+    code: err.code || "INTERNAL_ERROR",
+  });
+});
+
+// 404 Handler
+app.use((_req: Request, res: Response) => {
+  res.status(404).json({
+    error: "Route not found",
+    code: "NOT_FOUND",
+  });
+});
+
+// ----------------------
 // Start Server
 // ----------------------
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => console.log(` Server running on port ${PORT}`));
+app.listen(PORT, () => {
+  console.log(`✓ Server running on port ${PORT}`);
+  const corsInfo = corsOriginsEnv === "*"
+    ? "all origins"
+    : Array.isArray(allowedOrigins)
+      ? allowedOrigins.join(", ")
+      : allowedOrigins;
+  console.log(`✓ CORS enabled for: ${corsInfo}`);
+});
 
 export default app;
